@@ -313,15 +313,34 @@ class Connection(object):
         Desc:
             根据梯度下降算法更新权重
         Args:
+            self
+            rate --- 学习率
         Returns:
+            None
         '''
         self.calc_gradient()
         self.weight += rate * self.gradient
 
     def get_gradient(self):
+        '''
+        Desc:
+            获取当前梯度
+        Args:
+            self
+        Returns:
+            gradient --- 梯度
+        '''
         return self.gradient
 
     def __str__(self):
+        '''
+        Desc:
+            打印连接信息
+        Args:
+            self
+        Returns:
+            None
+        '''
         return '(%u-%u) -> (%u-%u) = %f' % (
             self.upstream_node.layer_index, 
             self.upstream_node.node_index,
@@ -331,29 +350,86 @@ class Connection(object):
 
 
 class Connections(object):
+    '''
+    Desc:
+        Connections对象，提供Connection集合操作
+    Args:
+        object --- Connections 对象
+    Returns:
+        None
+    '''
     def __init__(self):
+        '''
+        Desc:
+            初始化 connections，初始化一层中的几个节点
+        Args:
+            self
+        Returns:
+            None
+        '''
         self.connections = []
 
     def add_connection(self, connection):
+        '''
+        Desc:
+            在层中的 connections list 中添加节点
+        Args:
+            self
+            connection --- 需要在 connections 的 list 中添加的节点
+        Returns:
+            None
+        '''
         self.connections.append(connection)
 
     def dump(self):
+        '''
+        Desc:
+            打印 connections 信息
+        Args:
+            self
+        Returns:
+            None
+        '''
         for conn in self.connections:
             print conn
 
 
 class Network(object):
+    '''
+    Desc:
+        Network 对象，对外提供 API
+    Args:
+        object --- network 对象
+    Returns:
+        None
+    '''
     def __init__(self, layers):
+        '''
+        Desc:
+            初始化一个全连接神经网络
+        Args:
+            self
+            layers --- 二维数组，描述神经网络每层节点数
+        Returns:
+            None
+        '''
+        # 初始化 Connections 对象，节点待添加
         self.connections = Connections()
+        # 初始化 layers 对象，表示第几层
         self.layers = []
+        # layer_count 表示我们设计的神经网络有几层
         layer_count = len(layers)
-        node_count = 0;
+        # node_count 表示有多少个节点，初始化为 0
+        node_count = 0
+        # 在 layers 中添加 0~layer_count-1 层
         for i in range(layer_count):
             self.layers.append(Layer(i, layers[i]))
+        # 遍历现有层，每一层中添加上游节点和下游节点，并在上游节点和下游节点中
         for layer in range(layer_count - 1):
             connections = [Connection(upstream_node, downstream_node) 
                            for upstream_node in self.layers[layer].nodes
                            for downstream_node in self.layers[layer + 1].nodes[:-1]]
+            # 遍历 connections 中的节点，即每一层的所有节点。在初始化的list 中添加节点。
             for conn in connections:
                 self.connections.add_connection(conn)
                 conn.downstream_node.append_upstream_connection(conn)
@@ -361,53 +437,148 @@ class Network(object):
 
 
     def train(self, labels, data_set, rate, epoch):
+        '''
+        Desc:
+            训练我们搭建的全连接神经网络
+        Args:
+            self
+            labels --- 数组，训练样本的标签。每个元素是一个样本对应的标签
+            data_set --- 二维数组，训练样本特征，每个元素是一个样本的特征
+            rate --- 学习率
+            epoch --- 迭代次数
+        Returns:
+            None
+        '''
+        # 迭代 epoch 次，训练神经网络
         for i in range(epoch):
             for d in range(len(data_set)):
                 self.train_one_sample(labels[d], data_set[d], rate)
                 # print 'sample %d training finished' % d
 
     def train_one_sample(self, label, sample, rate):
+        '''
+        Desc:
+            内部函数，用一个样本训练网络
+        Args:
+            label --- 样本的标签
+            sample --- 样本特征
+            rate --- 学习率
+        Returns:
+            None
+        '''
         self.predict(sample)
         self.calc_delta(label)
         self.update_weight(rate)
 
     def calc_delta(self, label):
+        '''
+        Desc:
+            内部函数，计算每个节点的 delta
+        Args:
+            self
+            label --- 样本的标签
+        Returns:
+            None
+        '''
+        # 输出层的节点 output_nodes
         output_nodes = self.layers[-1].nodes
+        # 遍历所有的样本标签，计算输出层的 delta
         for i in range(len(label)):
             output_nodes[i].calc_output_layer_delta(label[i])
+        # 计算隐藏层的 delta
         for layer in self.layers[-2::-1]:
             for node in layer.nodes:
                 node.calc_hidden_layer_delta()
 
     def update_weight(self, rate):
+        '''
+        Desc:
+            内部函数，更新每个连接权重
+        Args:
+            rate --- 学习率
+        Returns:
+            None
+        '''
+        # 遍历除最后一层的每一层，根据下游节点进行更新权重
         for layer in self.layers[:-1]:
             for node in layer.nodes:
                 for conn in node.downstream:
                     conn.update_weight(rate)
 
     def calc_gradient(self):
+        '''
+        Desc:
+            内部函数，计算每个连接的梯度
+        Args:
+            self
+        Returns:
+            None
+        '''
+        # 遍历除去最后一层的所有层，根据下游节点，计算梯度
         for layer in self.layers[:-1]:
             for node in layer.nodes:
                 for conn in node.downstream:
                     conn.calc_gradient()
 
     def get_gradient(self, label, sample):
+        '''
+        Desc:
+            获得网络在一个样本下，每个连接上的梯度
+        Args:
+            self
+            label --- 样本的标签
+            sample --- 样本的特征
+        Returns:
+            None
+        '''
+        # 调用 predict() 函数进行预测
         self.predict(sample)
+        # 调用 calc_delta 函数进行计算 delta
         self.calc_delta(label)
+        # 调用 calc_gradient() 函数获取梯度
         self.calc_gradient()
 
     def predict(self, sample):
+        '''
+        Desc:
+            根据输入的样本预测输出值
+        Args:
+            self 
+            sample --- 输入的样本的特征
+        Returns:
+            map(lambda node: node.output, self.layers[-1].nodes[:-1]) --- 预测得到的样本输出
+        '''
+        # 对第一层（输入层）设置输出值，也就是输入样本的特征
         self.layers[0].set_output(sample)
+        # 遍历除输入层的每一层，计算output
         for i in range(1, len(self.layers)):
             self.layers[i].calc_output()
+        # 获得根据输入样本计算得到的样本预测输出
         return map(lambda node: node.output, self.layers[-1].nodes[:-1])
 
     def dump(self):
+        '''
+        Desc:
+            打印层的信息
+        Args:
+            self
+        Returns:
+            None
+        '''
+        # 遍历每一层，打印出层的信息
         for layer in self.layers:
             layer.dump()
 
 
 class Normalizer(object):
+    '''
+    Desc:
+        归一化
+    Args:
+        object --- 要归一化的对象
+    Returns:
+
+    '''
     def __init__(self):
         self.mask = [
             0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80
@@ -424,6 +595,15 @@ class Normalizer(object):
 
 
 def mean_square_error(vec1, vec2):
+    '''
+    Desc:
+        计算 MES
+    Args:
+        vec1 --- 输入向量 1
+        vec2 --- 输入向量 2
+    Returns:
+        计算得到的 MSE
+    '''
     return 0.5 * reduce(lambda a, b: a + b, 
                         map(lambda v: (v[0] - v[1]) * (v[0] - v[1]),
                             zip(vec1, vec2)
@@ -433,10 +613,14 @@ def mean_square_error(vec1, vec2):
 
 def gradient_check(network, sample_feature, sample_label):
     '''
-    梯度检查
-    network: 神经网络对象
-    sample_feature: 样本的特征
-    sample_label: 样本的标签
+    Desc:
+        梯度检查
+    Args:
+        network --- 神经网络对象
+        sample_feature --- 样本的特征
+        sample_label --- 样本的标签
+    Returns:
+        None
     '''
     # 计算网络误差
     network_error = lambda vec1, vec2: \
@@ -470,8 +654,20 @@ def gradient_check(network, sample_feature, sample_label):
 
 
 def train_data_set():
+    '''
+    Desc:
+        获得训练数据集
+    Args:
+        None
+    Returns:
+        labels --- 数据集中样本对应的标签
+        data_set --- 数据集的特征
+    '''
+    # 初始化一个 normalizer
     normalizer = Normalizer()
+    # 初始化 data_set
     data_set = []
+    # 初始化 labels
     labels = []
     for i in range(0, 256, 8):
         n = normalizer.norm(int(random.uniform(0, 256)))
@@ -481,21 +677,54 @@ def train_data_set():
 
 
 def train(network):
+    '''
+    Desc:
+        训练神经网络
+    Args:
+        network --- 神经网络
+    Returns:
+        None
+    '''
+    # 初始化数据集和对应的 labels
     labels, data_set = train_data_set()
+    # 对 network 进行训练
     network.train(labels, data_set, 0.3, 50)
 
 
 def test(network, data):
+    '''
+    Desc:
+        测试神经网络
+    Args:
+        network --- 神经网络
+        data --- 训练数据
+    Returns:
+        None
+    '''
+    # 初始化一个 normalizer
     normalizer = Normalizer()
+    # 对数据进行归一化
     norm_data = normalizer.norm(data)
+    # 用我们的神经网络进行对测试数据预测
     predict_data = network.predict(norm_data)
+    # 打印
     print '\ttestdata(%u)\tpredict(%u)' % (
         data, normalizer.denorm(predict_data))
 
 
 def correct_ratio(network):
+    '''
+    Desc:
+        计算我们的神经网络的正确率
+    Args:
+        network --- 全连接神经网络
+    Returns:
+        None
+    '''
+    # 调用归一化函数
     normalizer = Normalizer()
-    correct = 0.0;
+    correct = 0.0
+    # 256 个数据中进行计算正确率
     for i in range(256):
         if normalizer.denorm(network.predict(normalizer.norm(i))) == i:
             correct += 1.0
@@ -503,14 +732,34 @@ def correct_ratio(network):
 
 
 def gradient_check_test():
+    '''
+    Desc:
+        梯度检查测试
+    Args:
+        None
+    Returns:
+        None
+    '''
+    # 初始化一个网络
     net = Network([2, 2, 2])
+    # 设置 sample 的 feature
     sample_feature = [0.9, 0.1]
+    # 设置 sample 的 label
     sample_label = [0.9, 0.1]
+    # 梯度检查
     gradient_check(net, sample_feature, sample_label)
 
 
 if __name__ == '__main__':
+    '''
+    Desc:
+        主函数
+    '''
+    # 初始化一个全连接神经网络
     net = Network([8, 3, 8])
+    # 训练我们的神经网络
     train(net)
+    # 将信息打印出来
     net.dump()
+    # 计算神经网络的正确率
     correct_ratio(net)

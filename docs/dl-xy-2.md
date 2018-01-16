@@ -218,7 +218,7 @@ def train_and_perceptron():
 
 代码中，我还用我们编写的感知器实现了 or 函数，有兴趣的可以自己实现试试。
 
-完整代码：
+完整代码：https://github.com/chenyyx/deeplearning-notes/blob/master/src/7days/perceptron.py
 
 ## 3、小结
 

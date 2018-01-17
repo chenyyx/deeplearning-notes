@@ -261,6 +261,8 @@ if __name__ == '__main__':
 
 ![图29](../images/xy/xy_3_29.png)
 
+完整代码：https://github.com/chenyyx/deeplearning-notes/blob/master/src/7days/linear_unit.py
+
 
 ## 6、小结
 

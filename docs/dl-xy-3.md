@@ -168,3 +168,111 @@ f(x) = x
 
 ### 4.3、随机梯度下降（Stochastic Gradient Descent, SGD）
 
+如果我们根据以上介绍的（式3）来训练模型，那么我们每次更新 w 的迭代，要遍历训练数据中所有的样本进行计算，我们称这种算法叫做 批梯度下降（Batch Gradient Descent）。如果我们的样本数量非常大，比如数百万到数亿，那么计算量会异常巨大。因此，实用的算法是 SGD 算法。在 SGD 算法中，每次更新 w 的迭代，只计算一个样本。这样对于一个具有数百万样本的训练数据，完成一次遍历就会对 w 更新数百万次，效率大大提升。由于样本的噪音和随机性，每次更新 w 并不一定按照减少 E 的方向。然而，虽然存在一定随机性，大量的更新总体上沿着减少 E 的方向前进的，因此最后也能收敛到最小值附近。下图展示了 SGD 和 BGD 的区别
+
+![图26](../images/xy/xy_3_26.png)
+
+如上图，椭圆表示的是函数的等高线，椭圆中心是函数的最小值点。红色是 BGD 的逼近曲线，而紫色是 SGD 的逼近曲线。我们可以看到 BGD 是一直向着最低点前进的，而 SGD 明显躁动了许多，但是总体上仍然是向最低点逼近的。
+
+最后需要说明的是， SGD 不仅仅效率高，而且随机性有时候反而是好事。今天的目标函数是一个【凸函数】，沿着梯度反方向就能找到全局唯一的最小值。然而对于非凸函数来说，存在许多局部最小值。随机性有助于我们逃离某些很糟糕的局部最小值，从而获得一个更好的模型。
+
+
+## 5、代码实现：线性单元
+
+在上一节中，我们已经实现了感知器的代码，因此我们先比较一下感知器模型和线性单元模型，看一下哪些代码是我们这次编写代码可以复用的。
+
+![图27](../images/xy/xy_3_27.png)
+
+比较的结果令人惊讶，原来除了激活函数 f 不同之外，两者的模型和训练规则是一样的（在上表中，线性单元的优化算法是 SGD 算法）。那么，我们只需要把感知器的激活函数进行替换即可。感知器的代码请参考我们上一节，这里我们就不重复了。对于一个养成良好习惯的程序员来说，重复的代码是不可忍受的。大家应该把代码保存在一个代码库中（比如 git）。
+
+```python
+
+from perceptron import Perceptron
+#定义激活函数f
+f = lambda x: x
+class LinearUnit(Perceptron):
+    def __init__(self, input_num):
+        '''初始化线性单元，设置输入参数的个数'''
+        Perceptron.__init__(self, input_num, f)
+```
+
+通过继承 Perceptron 类，我们仅用几行代码就实现了线性单元。这再次证明了面向对象编程范式的强大。
+
+接下来，我们用简单的数据进行一下测试。
+
+```python
+def get_training_dataset():
+    '''
+    捏造5个人的收入数据
+    '''
+    # 构建训练数据
+    # 输入向量列表，每一项是工作年限
+    input_vecs = [[5], [3], [8], [1.4], [10.1]]
+    # 期望的输出列表，月薪，注意要与输入一一对应
+    labels = [5500, 2300, 7600, 1800, 11400]
+    return input_vecs, labels    
+
+
+def train_linear_unit():
+    '''
+    使用数据训练线性单元
+    '''
+    # 创建感知器，输入参数的特征数为1（工作年限）
+    lu = LinearUnit(1)
+    # 训练，迭代10轮, 学习速率为0.01
+    input_vecs, labels = get_training_dataset()
+    lu.train(input_vecs, labels, 10, 0.01)
+    #返回训练好的线性单元
+    return lu
+
+
+def plot(linear_unit):
+    import matplotlib.pyplot as plt
+    input_vecs, labels = get_training_dataset()
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(map(lambda x: x[0], input_vecs), labels)
+    weights = linear_unit.weights
+    bias = linear_unit.bias
+    x = range(0,12,1)
+    y = map(lambda x:weights[0] * x + bias, x)
+    ax.plot(x, y)
+    plt.show()
+
+
+if __name__ == '__main__': 
+    '''训练线性单元'''
+    linear_unit = train_linear_unit()
+    # 打印训练获得的权重
+    print linear_unit
+    # 测试
+    print 'Work 3.4 years, monthly salary = %.2f' % linear_unit.predict([3.4])
+    print 'Work 15 years, monthly salary = %.2f' % linear_unit.predict([15])
+    print 'Work 1.5 years, monthly salary = %.2f' % linear_unit.predict([1.5])
+    print 'Work 6.3 years, monthly salary = %.2f' % linear_unit.predict([6.3])
+    plot(linear_unit)
+```
+
+程序运行结果如下图
+
+![图28](../images/xy/xy_3_28.png)
+
+拟合的直线如下图
+
+![图29](../images/xy/xy_3_29.png)
+
+
+## 6、小结
+
+事实上，一个机器学习算法其实只有两部分
+
+ - 模型 —— 从输入特征 x 预测输入 y 的那个函数 h(x)
+ - 目标函数 —— 目标函数取最小（最大）值时所对应的参数值，就是模型的参数的最优值。很多时候我们只能获得目标函数的局部最小（最大）值，因此也只能得到模型参数的局部最优值。
+
+因此，如果你想最简洁地介绍一个算法，列出这两个函数就行了。
+
+接下来，你会用优化算法去求取目标函数的最小（最大）值。【随机】梯度【上升/下降】算法就是一个优化算法。针对同一个目标函数，不同的优化算法会推导出不同的训练规则。我们后面还会讲到其他的优化算法。
+
+其实在机器学习中，算法往往并不是关键所在，真正的关键之处在于选取特征。选取特征需要我们人类对问题的深刻理解，经验，以及思考。而神经网络算法的一个优势，就在于它能够自动学习到应该提取什么特征，从而使算法不再那么依赖人类，而这也是神经网络之所以吸引人的一个方面。
+
+现在，你已经差不多具备了学习神经网络的必备知识。

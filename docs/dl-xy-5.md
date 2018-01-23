@@ -89,7 +89,7 @@ def feedforward(self, a):
 ```python
 def SGD(self, training_data, epochs, mini_batch_size, eta, test_data=None):
     """
-    使用小批量随机梯度下降孙连神经网络。
+    使用小批量随机梯度下降训练神经网络。
     "training_data" 是表示训练输入和期望输出的 "(x, y)" 的列表。
     其他非可选参数是不言自明的。
     如果提供 "test_data" ，则在每次迭代期之后将根据测试数据评估网络，并打印出部分进度。
@@ -173,7 +173,7 @@ class Network(object):
 
     def SGD(self, training_data, epochs, mini_batch_size, eta, test_data=None):
         """
-        使用小批量随机梯度下降孙连神经网络。
+        使用小批量随机梯度下降训练神经网络。
         "training_data" 是表示训练输入和期望输出的 "(x, y)" 的列表。
         其他非可选参数是不言自明的。
         如果提供 "test_data" ，则在每次迭代期之后将根据测试数据评估网络，并打印出部分进度。

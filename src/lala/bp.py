@@ -582,3 +582,281 @@ class Network(object):
         for layer in self.layers:
             # 将所有的层的信息打印出来
             layer.dump()
+
+
+# # ------------------------- 至此，基本上我们把 我们的神经网络实现完成，下面还会介绍一下对应的梯度检查相关的算法，现在我们首先回顾一下我们上面写道的类及他们的作用 ------------------------
+'''
+1、节点类的实现 Node ：负责记录和维护节点自身信息以及这个节点相关的上下游连接，实现输出值和误差项的计算。如下：
+layer_index --- 节点所属的层的编号
+node_index --- 节点的编号
+downstream --- 下游节点
+upstream  ---- 上游节点
+output    ---- 节点的输出值
+delta   ------ 节点的误差项
+
+2、ConstNode 类，偏置项类的实现：实现一个输出恒为 1 的节点（计算偏置项的时候会用到），如下：
+layer_index --- 节点所属层的编号
+node_index ---- 节点的编号
+downstream ---- 下游节点
+没有记录上游节点，因为一个偏置项的输出与上游节点的输出无关
+output    ----- 偏置项的输出
+
+3、layer 类，负责初始化一层。作为的是 Node 节点的集合对象，提供对 Node 集合的操作。也就是说，layer 包含的是 Node 的集合。
+layer_index ---- 层的编号
+node_count ----- 层所包含的节点的个数
+def set_ouput() -- 设置层的输出，当层是输入层时会用到
+def calc_output -- 计算层的输出向量，调用的 Node 类的 计算输出 方法
+
+4、Connection 类：负责记录连接的权重，以及这个连接所关联的上下游节点，如下：
+upstream_node --- 连接的上游节点
+downstream_node -- 连接的下游节点
+weight   -------- random.uniform(-0.1, 0.1) 初始化为一个很小的随机数
+gradient -------- 0.0 梯度，初始化为 0.0 
+def calc_gradient() --- 计算梯度，使用的是下游节点的 delta 与上游节点的 output 相乘计算得到
+def get_gradient() ---- 获取当前的梯度
+def update_weight() --- 根据梯度下降算法更新权重
+
+5、Connections 类：提供对 Connection 集合操作，如下：
+def add_connection() --- 添加一个 connection
+
+6、Network 类：提供相应的 API，如下：
+connections --- Connections 对象
+layers -------- 神经网络的层
+layer_count --- 神经网络的层数
+node_count  --- 节点个数
+def train() --- 训练神经网络
+def train_one_sample() --- 用一个样本训练网络
+def calc_delta() --- 计算误差项
+def update_weight() --- 更新每个连接权重
+def calc_gradient() --- 计算每个连接的梯度
+def get_gradient() --- 获得网络在一个样本下，每个连接上的梯度
+def predict() --- 根据输入的样本预测输出值 
+'''
+
+# #--------------------------------------回顾完成了，有些问题可能还是没有弄懂，没事，我们接着看下面---------------------------------------------
+
+class Normalizer(object):
+    '''
+    Desc:
+        归一化工具类
+    Args:
+        object --- 对象
+    Returns:
+        None
+    '''
+    def __init__(self):
+        '''
+        Desc:
+            初始化
+        Args:
+            None
+        Returns:
+            None
+        '''
+        # 初始化 16 进制的数，用来判断位的，分别是
+        # 0x1 ---- 00000001
+        # 0x2 ---- 00000010
+        # 0x4 ---- 00000100
+        # 0x8 ---- 00001000
+        # 0x10 --- 00010000
+        # 0x20 --- 00100000
+        # 0x40 --- 01000000
+        # 0x80 --- 10000000
+        self.mask = [0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80]
+
+    def norm(self, number):
+        '''
+        Desc:
+            对 number 进行规范化
+        Args:
+            number --- 要规范化的数据
+        Returns:
+            规范化之后的数据
+        '''
+        # 此方法就相当于判断一个 8 位的向量，哪一位上有数字，如果有就将这个数设置为  0.9 ，否则，设置为 0.1，通俗比较来说，就是我们这里用 0.9 表示 1，用 0.1 表示 0
+        return map(lambda m: 0.9 if number & m else 0.1, self.mask)
+
+    def denorm(self, vec):
+        '''
+        Desc:
+            对我们得到的向量进行反规范化
+        Args:
+            vec --- 得到的向量
+        Returns:
+            最终的预测结果
+        '''
+        # 进行二分类，大于 0.5 就设置为 1，小于 0.5 就设置为 0
+        binary = map(lambda i: 1 if i > 0.5 else 0, vec)
+        # 遍历 mask
+        for i in range(len(self.mask)):
+            binary[i] = binary[i] * self.mask[i]
+        # 将结果相加得到最终的预测结果
+        return reduce(lambda x,y: x + y, binary)
+
+
+def mean_square_error(vec1, vec2):
+    '''
+    Desc:
+        计算平均平方误差
+    Args:
+        vec1 --- 第一个数
+        vec2 --- 第二个数
+    Returns:
+        返回 1/2 * (x-y)^2 计算得到的值
+    '''
+    return 0.5 * reduce(lambda a, b: a + b, map(lambda v: (v[0] - v[1]) * (v[0] - v[1]), zip(vec1, vec2)))
+
+
+
+def gradient_check(network, sample_feature, sample_label):
+    '''
+    Desc:
+        梯度检查
+    Args:
+        network --- 神经网络对象
+        sample_feature --- 样本的特征
+        sample_label --- 样本的标签   
+    Returns:
+        None
+    '''
+    # 计算网络误差
+    network_error = lambda vec1, vec2: 0.5 * reduce(lambda a, b: a + b, map(lambda v: (v[0] - v[1]) * (v[0] - v[1]), zip(vec1, vec2)))
+
+    # 获取网络在当前样本下每个连接的梯度
+    network.get_gradient(sample_feature, sample_label)
+
+    # 对每个权重做梯度检查    
+    for conn in network.connections.connections: 
+        # 获取指定连接的梯度
+        actual_gradient = conn.get_gradient()
+    
+        # 增加一个很小的值，计算网络的误差
+        epsilon = 0.0001
+        conn.weight += epsilon
+        error1 = network_error(network.predict(sample_feature), sample_label)
+    
+        # 减去一个很小的值，计算网络的误差
+        conn.weight -= 2 * epsilon # 刚才加过了一次，因此这里需要减去2倍
+        error2 = network_error(network.predict(sample_feature), sample_label)
+    
+        # 根据式6计算期望的梯度值
+        expected_gradient = (error2 - error1) / (2 * epsilon)
+    
+        # 打印
+        print 'expected gradient: \t%f\nactual gradient: \t%f' % (expected_gradient, actual_gradient)
+
+
+def train_data_set():
+    '''
+    Desc:
+        获取训练数据集
+    Args:
+        None
+    Returns:
+        labels --- 训练数据集每条数据对应的标签
+    '''
+    # 调用 Normalizer() 类
+    normalizer = Normalizer()
+    # 初始化一个 list，用来存储后面的数据
+    data_set = []
+    labels = []
+    # 0 到 256 ，其中以 8 为步长
+    for i in range(0, 256, 8):
+        # 调用 normalizer 对象的 norm 方法
+        n = normalizer.norm(int(random.uniform(0, 256)))
+        # 在 data_set 中 append n
+        data_set.append(n)
+        # 在 labels 中 append n
+        labels.append(n)
+    # 将它们返回
+    return labels, data_set
+
+
+def train(network):
+    '''
+    Desc:
+        使用我们的神经网络进行训练
+    Args:
+        network --- 神经网络对象
+    Returns:
+        None
+    '''
+    # 获取训练数据集
+    labels, data_set = train_data_set()
+    # 调用 network 中的 train方法来训练我们的神经网络
+    network.train(labels, data_set, 0.3, 50)
+
+
+def test(network, data):
+    '''
+    Desc:
+        对我们的全连接神经网络进行测试
+    Args:
+        network --- 神经网络对象
+        data ------ 测试数据集
+    Returns:
+        None
+    '''
+    # 调用 Normalizer() 类
+    normalizer = Normalizer()
+    # 调用 norm 方法，对数据进行规范化
+    norm_data = normalizer.norm(data)
+    # 对测试数据进行预测
+    predict_data = network.predict(norm_data)
+    # 将结果打印出来
+    print '\ttestdata(%u)\tpredict(%u)' % (data, normalizer.denorm(predict_data))
+
+
+def correct_ratio(network):
+    '''
+    Desc:
+        计算我们的神经网络的正确率
+    Args:
+        network --- 神经网络对象
+    Returns:
+        None
+    '''
+    normalizer = Normalizer()
+    correct = 0.0
+    for i in range(256):
+        if normalizer.denorm(network.predict(normalizer.norm(i))) == i:
+            correct += 1.0
+    print 'correct_ratio: %.2f%%' % (correct / 256 * 100)
+
+
+def gradient_check_test():
+    '''
+    Desc:
+        梯度检查测试
+    Args:
+        None
+    Returns:
+        None
+    '''
+    # 创建一个有 3 层的网络，每层有 2 个节点
+    net = Network([2, 2, 2])
+    # 样本的特征
+    sample_feature = [0.9, 0.1]
+    # 样本对应的标签
+    sample_label = [0.9, 0.1]
+    # 使用梯度检查来查看是否正确
+    gradient_check(net, sample_feature, sample_label)
+
+
+if __name__ == '__main__':
+    '''
+    Desc:
+        主函数
+    Args:
+        None
+    Returns:
+        None
+    '''
+    # 初始化一个神经网络，输入层 8 个节点，隐藏层 3 个节点，输出层 8 个节点
+    net = Network([8, 3, 8])
+    # 训练我们的神经网络
+    train(net)
+    # 将我们的神经网络的信息打印出来
+    net.dump()
+    # 打印出神经网络的正确率
+    correct_ratio(net)

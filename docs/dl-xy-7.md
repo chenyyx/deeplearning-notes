@@ -1,4 +1,4 @@
-# 七、卷积神经网络（CNN）详解
+# 七、卷积神经网络（CNN）详解（一）
 
 参考链接：
  - https://zhuanlan.zhihu.com/p/27642620
